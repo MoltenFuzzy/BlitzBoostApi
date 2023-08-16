@@ -1,6 +1,12 @@
 using Dapper;
 using Npgsql;
 using System.Data;
+using System.Linq;
+
+using FluentMigrator.Runner;
+using FluentMigrator.Runner.Initialization;
+
+using Microsoft.Extensions.DependencyInjection;
 
 public class DbService : IDbService
 {
@@ -11,7 +17,13 @@ public class DbService : IDbService
 
     public DbService(IConfiguration configuration)
     {
-        _db = new NpgsqlConnection(configuration.GetConnectionString("DatabaseName"));
+        _db = new NpgsqlConnection(
+            configuration.GetSection(configuration.GetConnectionString("DatabaseName")!).Value
+        );
+
+        var serviceProvider = CreateServices(configuration);
+        var runner = serviceProvider.GetRequiredService<IMigrationRunner>();
+        runner.MigrateUp();
     }
 
     async Task<T> IDbService.GetAsync<T>(string command, object parms)
@@ -45,5 +57,24 @@ public class DbService : IDbService
         result = await _db.ExecuteAsync(command, parms);
 
         return result;
+    }
+
+    private static IServiceProvider CreateServices(IConfiguration configuration)
+    {
+        return new ServiceCollection()
+            .AddFluentMigratorCore()
+            .ConfigureRunner(
+                rb =>
+                    rb.AddPostgres()
+                        .WithGlobalConnectionString(
+                            configuration
+                                .GetSection(configuration.GetConnectionString("DatabaseName")!)
+                                .Value
+                        )
+                        .ScanIn(typeof(DbService).Assembly)
+                        .For.Migrations()
+            )
+            .AddLogging(lb => lb.AddFluentMigratorConsole())
+            .BuildServiceProvider(false);
     }
 }
