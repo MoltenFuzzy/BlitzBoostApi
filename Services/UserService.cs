@@ -27,7 +27,7 @@ public class UserService : IUserService
     public async Task<User> GetUser(int id)
     {
         var userList = await _dbService.GetAsync<User>(
-            "SELECT * FROM public.User where id=@id",
+            "SELECT * FROM \"User\" where id=@id",
             new { id }
         );
         return userList;
